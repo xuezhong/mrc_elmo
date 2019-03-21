@@ -3,7 +3,7 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+#:
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
@@ -276,15 +276,11 @@ def rc_model(hidden_size, vocab, args):
     q_ids = get_data('q_ids', 2, args)
     p_ids_name = 'p_ids'
     p_ids = get_data('p_ids', 2, args)
-    q_ids_elmo = get_data('q_ids_elmo', 2, args)
-    p_ids_elmo = get_data('p_ids_elmo', 2, args)
-    #layers.Print(p_ids_elmo, message='p_ids_elmo', summarize=10)
-    #layers.Print(p_ids, message='p_ids', summarize=10)
-    #layers.Print(q_ids_elmo, message='q_ids_elmo', summarize=10)
-    #layers.Print(q_ids, message='q_ids', summarize=10)
     p_embs = embedding(p_ids, emb_shape, args)
     q_embs = embedding(q_ids, emb_shape, args)
     if args.elmo==True:
+        q_ids_elmo = get_data('q_ids_elmo', 2, args)
+        p_ids_elmo = get_data('p_ids_elmo', 2, args)
         q_embs_elmo = emb(q_ids_elmo)
         p_embs_elmo = emb(p_ids_elmo)
     drnn = layers.DynamicRNN()
@@ -296,9 +292,6 @@ def rc_model(hidden_size, vocab, args):
             p_emb_elmo = drnn.step_input(p_embs_elmo)
             p_encs_elmo= elmo_encoder(p_emb_elmo)
             q_encs_elmo= elmo_encoder(q_emb_elmo)
-            #layers.Print(p_encs_elmo, message='p_encs_elmo', summarize=10)
-            #layers.Print(q_encs_elmo, message='q_encs_elmo', summarize=10)
-            #layers.Print(p_emb, message='p_emb', summarize=10)
             p_emb=layers.concat(input=[p_emb, p_emb_elmo], axis=1)
             q_emb=layers.concat(input=[q_emb, q_emb_elmo], axis=1)      
 
@@ -326,10 +319,10 @@ def rc_model(hidden_size, vocab, args):
         layers.cross_entropy(
             input=end_probs, label=end_labels, soft_label=True),
         'sum')
-
     cost0 = layers.mean(cost0)
     cost1 = layers.mean(cost1)
     cost = cost0 + cost1
+
     cost.persistable = True
     feeding_list=[]
     if args.elmo==True:
