@@ -58,28 +58,28 @@ def prepare_batch_input(insts, args):
     for i in range(batch_size):
         p_len = 0
         p_id = []
-        p_id_elmo=[]
         p_ids = []
-        p_ids_elmo=[]
         q_ids = []
-        q_ids_elmo=[]
         q_id = []
-        q_id_elmo=[]
         p_id_r = []
         p_ids_r = []
         q_ids_r = []
         q_id_r = []
-
-        #import pdb;pdb.set_trace()
+        if args.elmo==True:
+            p_id_elmo=[]
+            p_ids_elmo=[]
+            q_ids_elmo=[]
+            q_id_elmo=[]
         for j in range(insts['passage_num'][i]):
             p_ids.append(insts['passage_token_ids'][passage_idx + j])
-            p_ids_elmo.append(insts['passage_token_ids_elmo'][passage_idx + j])
             p_id = p_id + insts['passage_token_ids'][passage_idx + j]
-            p_id_elmo = p_id_elmo + insts['passage_token_ids_elmo'][passage_idx + j]
             q_ids.append(insts['question_token_ids'][passage_idx + j])
-            q_ids_elmo.append(insts['question_token_ids_elmo'][passage_idx + j])
-            q_id = q_id + insts['question_token_ids'][passage_idx + j]
-            q_id_elmo = q_id_elmo + insts['question_token_ids_elmo'][passage_idx + j]
+            q_id = q_id + insts['question_token_ids'][passage_idx + j]     
+            if args.elmo==True:
+                p_ids_elmo.append(insts['passage_token_ids_elmo'][passage_idx + j])
+                p_id_elmo = p_id_elmo + insts['passage_token_ids_elmo'][passage_idx + j]
+                q_ids_elmo.append(insts['question_token_ids_elmo'][passage_idx + j])
+                q_id_elmo = q_id_elmo + insts['question_token_ids_elmo'][passage_idx + j]
         passage_idx += insts['passage_num'][i]
         p_len = len(p_id)
 
@@ -357,7 +357,7 @@ def train(logger, args):
         logger.info('vocab size is {} and embed dim is {}'.format(vocab.size(
         ), vocab.embed_dim))
     brc_data = BRCDataset(args.max_p_num, args.max_p_len, args.max_q_len,
-                          args.trainset, args.devset)
+                          args.elmo,args.elmo_dir,train_files=args.trainset,dev_files= args.devset)
     logger.info('Converting text into ids...')
     brc_data.convert_to_ids(vocab)
     logger.info('Initialize the model...')
@@ -404,6 +404,7 @@ def train(logger, args):
                 obj_func = avg_cost
                 optimizer.minimize(obj_func)
 
+            #ipdb.set_trace()
             # initialize parameters
             place = core.CUDAPlace(0) if args.use_gpu else core.CPUPlace()
             exe = Executor(place)
@@ -417,8 +418,9 @@ def train(logger, args):
                     'embedding_para_1').get_tensor()
                 embedding_para.set(vocab.embeddings.astype(np.float32), place)
             #load elmo data
-            src_pretrain_model_path = '490001'
-            fluid.io.load_vars(executor=exe, dirname=src_pretrain_model_path, predicate=if_exist, main_program=main_program) 
+            if args.elmo==True:
+                src_pretrain_model_path = '490001'
+                fluid.io.load_vars(executor=exe, dirname=src_pretrain_model_path, predicate=if_exist, main_program=main_program) 
             # prepare data
             feed_list = [
                 main_program.global_block().var(var_name)
@@ -426,7 +428,7 @@ def train(logger, args):
             ]
             #ipdb.set_trace()
             feeder = fluid.DataFeeder(feed_list, place)
-
+            #ipdb.set_trace()
             logger.info('Training the model...')
             parallel_executor = fluid.ParallelExecutor(
                 main_program=main_program,
@@ -521,7 +523,7 @@ def evaluate(logger, args):
         logger.info('vocab size is {} and embed dim is {}'.format(vocab.size(
         ), vocab.embed_dim))
     brc_data = BRCDataset(
-        args.max_p_num, args.max_p_len, args.max_q_len, dev_files=args.devset)
+        args.max_p_num, args.max_p_len, args.max_q_len,args.elmo,args.elmo_dir, dev_files=args.devset)
     logger.info('Converting text into ids...')
     brc_data.convert_to_ids(vocab)
     logger.info('Initialize the model...')
@@ -568,7 +570,7 @@ def predict(logger, args):
         logger.info('vocab size is {} and embed dim is {}'.format(vocab.size(
         ), vocab.embed_dim))
     brc_data = BRCDataset(
-        args.max_p_num, args.max_p_len, args.max_q_len, dev_files=args.testset)
+        args.max_p_num, args.max_p_len, args.max_q_len,args.elmo,args.elmo_dir, dev_files=args.testset)
     logger.info('Converting text into ids...')
     brc_data.convert_to_ids(vocab)
     logger.info('Initialize the model...')
@@ -618,7 +620,7 @@ def prepare(logger, args):
             os.makedirs(dir_path)
 
     logger.info('Building vocabulary...')
-    brc_data = BRCDataset(args.max_p_num, args.max_p_len, args.max_q_len,
+    brc_data = BRCDataset(args.max_p_num, args.max_p_len, args.max_q_len,args.elmo,args.elmo_dir,
                           args.trainset, args.devset, args.testset)
     vocab = Vocab(lower=True)
     for word in brc_data.word_iter('train'):

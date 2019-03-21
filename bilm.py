@@ -140,7 +140,7 @@ def elmo_encoder(x_emb):
     emb_size = 512
     proj_size = 512
     hidden_size = 4096
-    batch_size = 32
+    batch_size = 16
     num_layers = 2
     num_steps = 20
 

@@ -24,9 +24,7 @@ import logging
 import numpy as np
 from collections import Counter
 import io
-
 import ipdb
-
 class BRCDataset(object):
     """
     This module implements the APIs for loading and using baidu reading comprehension dataset
@@ -36,6 +34,8 @@ class BRCDataset(object):
                  max_p_num,
                  max_p_len,
                  max_q_len,
+                 elmo,
+                 elmo_dir,
                  train_files=[],
                  dev_files=[],
                  test_files=[]):
@@ -43,7 +43,8 @@ class BRCDataset(object):
         self.max_p_num = max_p_num
         self.max_p_len = max_p_len
         self.max_q_len = max_q_len
-        
+        self.elmo = elmo
+        self.elmo_dir = elmo_dir
         self.train_set, self.dev_set, self.test_set = [], [], []
         if train_files:
             for train_file in train_files:
@@ -63,8 +64,8 @@ class BRCDataset(object):
             self.logger.info('Test set size: {} questions.'.format(
                 len(self.test_set)))
             
-        #####need modify路径
-        self.elmo_dict=self._load_elmo('data/vocabulary_min5k.txt')
+        if self.elmo==True:
+            self.elmo_dict=self._load_elmo(self.elmo_dir)
         
             
     def _load_elmo(self,data_path):
@@ -90,6 +91,7 @@ class BRCDataset(object):
             for lidx, line in enumerate(fin):
                 sample = json.loads(line.strip())
                 if train:
+                    #ipdb.set_trace()
                     if len(sample['answer_spans']) == 0:
                         continue
                     if sample['answer_spans'][0][1] >= self.max_p_len:
@@ -163,20 +165,26 @@ class BRCDataset(object):
             for pidx in range(max_passage_num):
                 if pidx < len(sample['passages']):
                     count += 1
-                    #ipdb.set_trace()
                     batch_data['question_token_ids'].append(sample[
                         'question_token_ids'][0:self.max_q_len])
-                    batch_data['question_token_ids_elmo'].append(sample['question_token_ids_elmo'][0:self.max_q_len])
+                   
                     batch_data['question_length'].append(
                         min(len(sample['question_token_ids']), self.max_q_len))
                     passage_token_ids = sample['passages'][pidx][
                         'passage_token_ids'][0:self.max_p_len]
-                    passage_token_ids_elmo = sample['passages'][pidx][
-                        'passage_token_ids_elmo'][0:self.max_p_len]
                     batch_data['passage_token_ids'].append(passage_token_ids)
-                    batch_data['passage_token_ids_elmo'].append(passage_token_ids_elmo)
+                    if self.elmo==True:
+                        batch_data['question_token_ids_elmo'].\
+                        append(sample['question_token_ids_elmo'][0:self.max_q_len])
+
+                        passage_token_ids_elmo = sample['passages'][pidx][
+                        'passage_token_ids_elmo'][0:self.max_p_len]
+ 
+                        batch_data['passage_token_ids_elmo'].\
+                        append(passage_token_ids_elmo)
                     batch_data['passage_length'].append(
                         min(len(passage_token_ids), self.max_p_len))
+                    
             # record the start passage index of current sample
             passade_idx_offset = sum(batch_data['passage_num'])
             batch_data['passage_num'].append(count)
@@ -193,7 +201,6 @@ class BRCDataset(object):
                 # fake span for some samples, only valid for testing
                 batch_data['start_id'].append(0)
                 batch_data['end_id'].append(0)
-        #import pdb;pdb.set_trace()
         return batch_data
 
     def word_iter(self, set_name=None):
@@ -236,31 +243,26 @@ class BRCDataset(object):
                 #import pdb;pdb.set_trace()
                 sample['question_token_ids'] = vocab.convert_to_ids(sample[
                     'question_tokens'])
-                #是否有问题？
-                sample['question_token_ids_elmo']=[]
-                for label in sample['question_tokens']:
-                    iid=2
-                    if self.elmo_dict.get(label) is not None:
-                         iid = self.elmo_dict.get(label)
-                    #ipdb.set_trace()
-                    sample['question_token_ids_elmo'].append(iid)
-                if (len(sample['question_token_ids_elmo']) != len(sample['question_token_ids'])):
-                    import pdb;pdb.set_trace()
-                #sample['question_token_ids_elmo']  = [self.elmo_dict.get(label) for label in sample['question_tokens']]
-                
+                if self.elmo==True:
+                    sample['question_token_ids_elmo']=[]
+                    for label in sample['question_tokens']:
+                        iid=2
+                        if self.elmo_dict.get(label) is not None:
+                             iid = self.elmo_dict.get(label)
+                        sample['question_token_ids_elmo'].append(iid)
+
                 for passage in sample['passages']:
                     #ipdb.set_trace()
                     passage['passage_token_ids'] = vocab.convert_to_ids(passage[
                         'passage_tokens'])
-                    passage['passage_token_ids_elmo']=[]
-                    for label in passage['passage_tokens']:
-                        iid=2
-                        if self.elmo_dict.get(label) is not None:
-                            iid = self.elmo_dict.get(label)
-                        passage['passage_token_ids_elmo'].append(iid)
-                    #passage['passage_token_ids_elmo']  = [self.elmo_dict.get(label) for label in passage['passage_tokens']]
-                    if (len(passage['passage_token_ids_elmo']) != len(passage['passage_token_ids'])):
-                        import pdb;pdb.set_trace()
+                    if self.elmo==True:
+                        passage['passage_token_ids_elmo']=[]
+                        for label in passage['passage_tokens']:
+                            iid=2
+                            if self.elmo_dict.get(label) is not None:
+                                iid = self.elmo_dict.get(label)
+                            passage['passage_token_ids_elmo'].append(iid)
+
     def gen_mini_batches(self, set_name, batch_size, pad_id, shuffle=True):
         """
         Generate data batches for a specific dataset (train/dev/test)
@@ -288,3 +290,4 @@ class BRCDataset(object):
         for batch_start in np.arange(0, data_size, batch_size):
             batch_indices = indices[batch_start:batch_start + batch_size]
             yield self._one_mini_batch(data, batch_indices, pad_id)
+
